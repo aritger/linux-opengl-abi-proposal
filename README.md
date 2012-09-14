@@ -7,6 +7,7 @@ This is a proposal to update the Linux OpenGL ABI in order to:
 
 * Redefine what libraries should exist, and what entry points they
   should each expose, given:
+
     * The emergence of EGL (both within and without the X Window System).
     * The interest in GLES on the desktop.
     * The optional removal of some GL features in OpenGL 3.1.
@@ -19,6 +20,6 @@ This is a proposal to update the Linux OpenGL ABI in order to:
   process.  Different threads could be current to different contexts which
   get dispatched to potentially different OpenGL implementations.
 
-Backwards compatibility should be preserved: hopefully existing Linux
-OpenGL applications can continue to run after this is implemented.
+Backwards compatibility should be preserved: existing Linux OpenGL
+applications should continue to run after this is implemented.
 
