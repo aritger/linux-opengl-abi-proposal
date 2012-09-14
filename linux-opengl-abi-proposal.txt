@@ -390,6 +390,14 @@ Issues
         dispatch a window system layer function without knowledge of
         its parameters.
 
+        It seems like the vendors providing a GetProcAddress-able GLX/EGL
+        function are the only ones who would know how to interpret its
+        arguments in order to dispatch it.  So, maybe each vendor should
+        provide a "dispatch" function for each GLX/EGL extension function
+        they provide.  This dispatch function could be responsible
+        for interpreting the arguments to select which vendor should
+        get called.
+
     (4) What dispatching model should be used for GetProcAddress-able
         entry points?
 
@@ -435,6 +443,11 @@ Issues
         libraries.  See "Maintaining APIs and ABIs" in Ulrich Drepper's
         DSO Howto [7].  I've coded up a demonstration of how that might
         work here: [8].
+
+        Is it conceivable for a single thread to have both an EGL context
+        (say, using GLESv2) and GLX (using OpenGL) context current at
+        the same time?  If that were allowed, then the Mesa solution
+        might not be adequate.
 
     (8) How should OpenGL deprecation impact the Linux OpenGL ABI?
 
@@ -501,6 +514,17 @@ Issues
     (10) How should any of the vendor selection mechanisms in libEGL.so.1
         or libGLX.so.1 interact with Dave Airlie's Prime work?
 
+    (11) It would be nice to standardize pkg-config files.  What should
+        that look like?
+
+        Maybe the standardization there is easy with this proposal,
+        because the application-visible libraries would all be
+        vendor-neutral, and thus different vendors wouldn't provide
+        conflicting pkg-configs.
+
+        Maybe pkg-config should also be the mechanism for telling vendor
+        installers where to place vendor libraries (Issue 1)?
+
 References
 
     [1] http://www.opengl.org/registry/ABI/
@@ -516,4 +540,10 @@ Revision History
 
     #1 September 12, 2012: aritger
         - initial version
+    #2 September 14, 2012: aritger
+        - add note on pkg-config (krh)
+        - add question about whether GLX and EGL can be current to the
+          same thread at the same time (rmorell, jajones)
+        - add possible solution to Issue 3 (dispatching of GLX/EGL
+          GetProcAddress'ed functions)
 
