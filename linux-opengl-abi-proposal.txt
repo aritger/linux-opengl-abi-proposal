@@ -1,10 +1,9 @@
-2012 Linux OpenGL ABI Proposal
+New Linux OpenGL ABI Proposal
 
 Background
 
-    The current Linux OpenGL ABI [1] (the "2000 Linux OpenGL ABI") is
-    twelve years old, and the industry has advanced significantly in
-    the past decade:
+    The current Linux OpenGL ABI [1] (the "2000 Linux OpenGL ABI") is over
+    a decade old, and the industry has advanced significantly since then:
 
     * EGL has emerged as a compelling alternative window system binding,
       for use both within and without the X Window System.
@@ -323,42 +322,91 @@ Example Control Flow
 
         * libOpenGL.so.1's entry points default to a dispatch table filled
           with noop functions.
-        * Application calls any GLX entry point; libGLX.so.1 queries
-          the X server for the vendor name to use with each X screen.
-        * When application calls entry point that should be dispatched
-          to vendor, libGLX.so.1 searches defined search paths to find
-          the correct vendor library.
-        * libGLX.so.1 loads vendor library and gets its table of GLX
+        * The application calls any GLX entry point; libGLX.so.1 queries
+          the X server for the vendor name to use with each X screen (a).
+        * When the application calls an entry point that should be
+          dispatched to the vendor, libGLX.so.1 searches defined search
+          paths to find the correct vendor library.
+        * libGLX.so.1 loads the vendor library and gets its table of GLX
           dispatch functions.
-        * libGLX.so.1 dispatches to vendor library for appropriate GLX
-          entry points.
-        * Application calls MakeCurrent, which gets dispatched to
+        * libGLX.so.1 dispatches to the vendor library for appropriate GLX
+          entry points (b).
+        * The application calls MakeCurrent, which gets dispatched to the
           vendor library.
-        * Vendor library's MakeCurrent calls libOpenGL.so.1 to plug
-          dispatch table(s) into TLS.
-        * Application calls OpenGL entry points in libOpenGL.so.1;
-          these dispatch to vendor library.
+        * The vendor library's MakeCurrent calls libOpenGL.so.1 to plug
+          its dispatch table(s) into TLS (c).
+        * The application calls OpenGL entry points in libOpenGL.so.1;
+          these dispatch to the vendor library (d).
+
+           ┏━━━━━━━━━━━━━┓
+        ┌──┃ application ┃            ┏━━━━━━━━━━━━━━━━━━┓
+        │  ┗━━━━━━━━━━━━━┛ ┌───(a)───▶┃ X server         ┃
+        │     │            │          ┗━━━━━━━━━━━━━━━━━━┛
+        │     ▼            │
+        │  ┏━━━━━━━━━━━━━━━━┓         ┏━━━━━━━━━━━━━━━━━━┓
+        │  ┃ libGLX.so.1    ┃───(b)──▶┃ libGLX_VENDOR.so ┃──▶ ...
+        │  ┗━━━━━━━━━━━━━━━━┛         ┗━━━━━━━━━━━━━━━━━━┛
+        │                              |       ▲
+        │  ┏━━━━━━━━━━━━━━━━┓◀───(c)───┘       │
+        └─▶┃ libOpenGL.so.1 ┃────────(d)───────┘
+           ┗━━━━━━━━━━━━━━━━┛
+
 
     Scenario 2: Application links against libEGL.so.1 and libOpenGL.so.1:
 
         * libOpenGL.so.1's entry points default to a dispatch table filled
           with noop functions.
-        * Application calls eglInitialize(); EGL API library uses
-          configuration magic to select appropriate vendor driver.
-        * libEGL.so.1 loads vendor library and gets its table of EGL
+        * The application calls eglInitialize(); the EGL API library uses
+          configuration magic to select the appropriate vendor driver.
+        * libEGL.so.1 loads the vendor library and gets its table of EGL
           dispatch functions.
-        * libEGL.so.1 dispatches to vendor library for appropriate EGL
-          entry points.
-        * Application calls MakeCurrent, which gets dispatched to
-          vendor library.
-        * Vendor library's MakeCurrent calls libOpenGL.so.1 to plug 
-          dispatch table(s) into TLS.
-        * Application calls OpenGL entry points in libOpenGL.so.1; 
-          these dispatch to vendor library.
+        * libEGL.so.1 dispatches to the vendor library for appropriate EGL
+          entry points (a).
+        * The application calls MakeCurrent, which gets dispatched to
+          the vendor library.
+        * The vendor library's MakeCurrent calls libOpenGL.so.1 to plug
+          its dispatch table(s) into TLS (b).
+        * The application calls OpenGL entry points in libOpenGL.so.1;
+          these dispatch to the vendor library (c).
+
+           ┏━━━━━━━━━━━━━┓
+        ┌──┃ application ┃
+        │  ┗━━━━━━━━━━━━━┛
+        │     │
+        │     ▼
+        │  ┏━━━━━━━━━━━━━━━━┓         ┏━━━━━━━━━━━━━━━━━━┓
+        │  ┃ libEGL.so.1    ┃───(a)──▶┃ libEGL_VENDOR.so ┃──▶ ...
+        │  ┗━━━━━━━━━━━━━━━━┛         ┗━━━━━━━━━━━━━━━━━━┛
+        │                              |       ▲
+        │  ┏━━━━━━━━━━━━━━━━┓◀───(b)───┘       │
+        └─▶┃ libOpenGL.so.1 ┃────────(c)───────┘
+           ┗━━━━━━━━━━━━━━━━┛
+
 
     Scenario 3: Application links against libGL.so.1
 
-        * Should be same as the libGLX.so.1 + libOpenGL.so.1 scenario.
+        * This should be the same as the libGLX.so.1 + libOpenGL.so.1
+          scenario (Scenario 1), possibly using ELF DT_FILTER [2] to
+          cause libGL.so.1's symbols to be resolved by libOpenGL.so.1
+          and libGLX.so.1.
+
+           ┏━━━━━━━━━━━━━┓
+           ┃ application ┃
+           ┗━━━━━━━━━━━━━┛
+              │
+              ▼
+           ┏━━━━━━━━━━━━━┓
+        ┌──┃ libGL.so.1  ┃            ┏━━━━━━━━━━━━━━━━━━┓
+        │  ┗━━━━━━━━━━━━━┛ ┌───(a)───▶┃ X server         ┃
+        │     │            │          ┗━━━━━━━━━━━━━━━━━━┛
+        │     ▼            │
+        │  ┏━━━━━━━━━━━━━━━━┓         ┏━━━━━━━━━━━━━━━━━━┓
+        │  ┃ libGLX.so.1    ┃───(b)──▶┃ libGLX_VENDOR.so ┃──▶ ...
+        │  ┗━━━━━━━━━━━━━━━━┛         ┗━━━━━━━━━━━━━━━━━━┛
+        │                              |       ▲
+        │  ┏━━━━━━━━━━━━━━━━┓◀───(c)───┘       │
+        └─▶┃ libOpenGL.so.1 ┃────────(d)───────┘
+           ┗━━━━━━━━━━━━━━━━┛
 
 Issues
 
@@ -405,7 +453,7 @@ Issues
         entry points for every string passed to GetProcAddress, and map
         to the actual vendor's functions at MakeCurrent time.
 
-    (5) Even though it is 2012, some important OpenGL applications still
+    (5) Even in this day and age, some important OpenGL applications still
         use immediate mode OpenGL in very API-heavy ways.  In such cases,
         even just minimal dispatching overhead has a significant impact
         on performance.  How can we mitigate the performance impact in
@@ -525,6 +573,8 @@ Issues
         Maybe pkg-config should also be the mechanism for telling vendor
         installers where to place vendor libraries (Issue 1)?
 
+    (12) OpenGL header files should be standardized and recommended.
+
 References
 
     [1] http://www.opengl.org/registry/ABI/
@@ -546,4 +596,10 @@ Revision History
           same thread at the same time (rmorell, jajones)
         - add possible solution to Issue 3 (dispatching of GLX/EGL
           GetProcAddress'ed functions)
-
+    #3 April 23, 2013: aritger
+        - fix a few typos and grammar issues
+        - remove explicit references to 2012; just call this "new"
+          instead, since there isn't a firm date when this ABI would be
+          finalized and deployed
+        - add an issue for standardizing OpenGL header files
+        - add diagrams to the scenarios in the Example Control Flow
