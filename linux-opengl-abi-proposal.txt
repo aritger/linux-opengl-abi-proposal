@@ -151,7 +151,7 @@ GLX
     GLX 1.4 entry points fall into one of several categories:
 
     (1) Entry points that take an X Display pointer and an X screen number
-        (or, an object, such as a GLXContect or GLXDrawable, that implies
+        (or, an object, such as a GLXContext or GLXDrawable, that implies
         an X screen).  E.g.,
 
             Bool glXMakeCurrent(Display *dpy,
@@ -228,7 +228,7 @@ EGL
 
     The general dispatching approach in EGL would be the same as described
     above for GLX.  The vendor selection, done during eglInitialize(),
-    would be more sophisticated that the GLX equivalent.
+    would be more sophisticated than the GLX equivalent.
 
     The Mesa EGL implementation appears to be almost exactly this.
 
