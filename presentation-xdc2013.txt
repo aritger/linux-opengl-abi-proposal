@@ -118,12 +118,34 @@ _____________________________________________________________________________
 
 =GetProcAddress=
 
+* Implemented by lib{EGL,GLX}
+* Returns function pointers for the {EGL,GLX} entry points it knows about
+* Online-generates, using mapi, dispatch functions for all other entry points
 _____________________________________________________________________________
 
 =Use of mapi=
+
+* This is an open-source component from Mesa
+    * Allocates executable memory
+    * Assigns dispatch table offsets to entry points
 _____________________________________________________________________________
 
+==Challenges==
 
+* Mapping GLX objects (XIDs) to vendors
+* handling GLX/EGL extension entry points through GetProcAddress
+
+_____________________________________________________________________________
+
+=Misc=
+
+* Vendor can change dispatch table pointer for the current thread at any time
+* Vendor called when losing current
+* Offsets within dispatch table negogiated at run-time
+    * Vendors' dispatch tables have to be assembled on the fly
+* We are the in process of wiring this up to NVIDIA's GL/GLX implementation
+    * This should help us sanitize the API that vendor libraries plug into
+    * This should let us run some performance comparisons 
 
 
 
