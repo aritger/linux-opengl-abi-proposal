@@ -1,0 +1,129 @@
+
+A New Linux OpenGL ABI
+_____________________________________________________________________________
+
+=History=
+
+The Linux OpenGL ABI states:
+
+* "libGL.so.1 ... must export all OpenGL 1.2, ..., GLX 1.3, and ARB_multitexture entry points statically."
+* "libGL.so.1 ... must be located in /usr/lib."
+
+_____________________________________________________________________________
+
+=Goals=
+
+* Define new ABI between applications and OpenGL libraries:
+    * Window System libraries: EGL, GLX
+    * Client API libraries: OpenGL, OpenGL ES 
+
+* Allow multiple vendor implementations to co-exist on the file system.
+_____________________________________________________________________________
+
+=New Library Organization: Summary=
+
+* Vendor-neutral Client API Libraries:
+    * libOpenGL.so.1
+    * libGLESv1_CM.so.1
+    * libGLESv2.so.1
+
+* Vendor-neutral window system libraries:
+    * libGLX.so.1
+    * libEGL.so.1
+
+* Vendor-specific libraries:
+    * libGLX_${VENDOR}.so.1
+    * libEGL_${VENDOR}.so.1
+
+_____________________________________________________________________________
+
+=New Library Organization: Vendor-Neutral Client API Libraries=
+
+* libOpenGL.so.1
+    * Provides symbols for all entry points in OpenGL 4.4
+    * Vendors can provide additional OpenGL entry points, retrieved via {egl,glX}GetProcAddress.
+    * No EGL or GLX entry points provided by this library; should be used with lib{GLX,EGL}.so.1
+
+* libGLESv1_CM.so.1
+    * Provides symbols for all OpenGL ES 1 common profile entry points.
+    * No EGL or GLX entry points provided by this library; should be used with lib{GLX,EGL}.so.1
+
+* libGLESv2.so.1:
+    * Provides symbols for all OpenGL ES 2 and 3 entry points.
+    * Relationship to EGL/GLX comparable to libOpenGL.so.1
+    * No EGL or GLX entry points provided by this library; should be used with lib{GLX,EGL}.so.1
+
+_____________________________________________________________________________
+
+=New Library Organization: Vendor-Neutral Window System Libraries=
+
+* libEGL.so.1
+    * Provides symbols for all EGL 1.4 entry points.
+    * Loads and dispatches to one or more vendor libraries.
+
+* libGLX.so.1
+    * Provides symbols for all GLX 1.4 entry points.
+    * Provides symbols for the GLX_ARB_create_context_profile extension.
+    * Loads and dispatches to one or more vendor libraries.
+_____________________________________________________________________________
+
+=New Library Organization: Vendor-Specific Libraries=
+
+* lib{EGL,GLX}_${VENDOR}.so.1
+    * Provides init function that lib{EGL,GLX}.so.1 calls.
+    * Pull in the vendor's implementation of all the client APIs it supports, and register with the appropriate Client API library at MakeCurrent time.
+    * Must not export symbols with names that collide with the namespace of EGL (^egl.*), GLX (^glX.*), or OpenGL (^gl.*).
+
+_____________________________________________________________________________
+
+=Distribution=
+
+* Once the development work for the vendor-neutral libraries settles down, hopefully requires very little maintenance.
+* Once in maintenance mode, contribute to Khronos for hosting.
+* Linux distributors would distribute the vendor-neutral libraries.
+* Vendor libraries would be packaged separately from the vendor-neutral libraries.
+
+_____________________________________________________________________________
+
+=Backwards Compatibility=
+
+* libGL.so provided with the vendor-neutral libraries.
+* Use ELF DT_FILTER to route libGL.so symbols to libOpenGL.so.1 and libGLX.so.1.
+* Current applications should be unaffected.
+
+* QUESTION:
+    * Current OpenGL implementations provide more entry points than in libOpenGL.so.1 and libGLX.so.1.
+    * Some applications are probably taking advantage of this.
+    * How to keep those applications happy?
+    * Enumerate all entry points we want in libGL.so.1; for those not
+      exported by libOpenGL.so.1 and libGLX.so.1, libGL.so.1 can have
+      a wrapper function that uses GetProcAddress to get the function
+      pointer from libOpenGL.so.1
+_____________________________________________________________________________
+
+=NVIDIA's Migration Plan=
+
+* Update NVIDIA OpenGL implementation to provide lib{EGL,GLX}_nvidia.so.1 (and rely on vendor-neutral libraries)
+* Encourage Linux distributors to repackage new libraries.
+* NVIDIA's installer will install the vendor-neutral libraries itself, if the distro is too old.
+_____________________________________________________________________________
+
+=Dispatching to Vendor Implementations=
+
+* It is a design goal to allow multiple multiple vendor implementations to coexist within the same process.
+* Most EGL,GLX entry points imply a vendor (through X screen, EGLDisplay, or current context).
+* MakeCurrent defines which vendor implementation to use for a Client API.
+* We are not trying to address server-side GLX (yet), so in practice GLX can only have one vendor at a time, for now.
+_____________________________________________________________________________
+
+=GetProcAddress=
+
+_____________________________________________________________________________
+
+=Use of mapi=
+_____________________________________________________________________________
+
+
+
+
+
