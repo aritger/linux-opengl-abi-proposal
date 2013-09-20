@@ -80,22 +80,33 @@ Libraries
     The libraries to be provided are:
 
     * libGL.so.1
+        * This would be a vendor-neutral API library.
         * Provides symbols for all OpenGL 1.2 entry points (as per [1]).
         * Provides symbols for all GLX 1.3 entry points (as per [1]).
-        * This would be a vendor-neutral API library.
-        * Hopefully would just pass through to libGLX.so.1 and libOpenGL.so.1
-          (maybe using ELF DT_FILTER; see [2] and the GNU ld(1) man page).
+        * Provides symbols for all OpenGL or GLX extension entry points
+          currently provided by all vendors' libGL.so.1 libraries.
+          I.e., this needs to provide the union of entry points that
+          all vendors' libGL.so.1 libraries provide today, in order to
+          be truly backwards compatible.
+        * For libGL.so.1 entry points that are provided by libGLX.so.1
+          or libOpenGL.so.1, libGL.so.1 would use ELF DT_FILTERing (see
+          [2] and the GNU ld(1) man page) to route the entry point to
+          libGLX.so.1 or libOpenGL.so.1.
+        * For libGL.so.1 entry points that are not provided by libGLX.so.1
+          or libOpenGL.so.1, libGL.so.1 would call libGLX.so.1's
+          glXGetProcAddress to get the entry point.
 
     * libOpenGL.so.1
-        * Provides symbols for all entry points in a TBD version of OpenGL.
+        * Provides symbols for all entry points in OpenGL 4.4, plus all
+          entry points in the GL_ARB_compatibility extension.
         * Vendors can provide additional OpenGL entry points that can be
           retrieved via {egl,glX}GetProcAddress.
         * No EGL or GLX entry points are provided by this library; it
           is expected that libOpenGL.so.1 would be used in conjunction
           with one of the Window system libraries (libGLX.so.1 or
           libEGL.so.1).
-        * Provides a function for vendor libraries to install a dispatch table.
-        * Provides a function for vendor libraries to report their
+        * Provides a mechanism for vendor libraries to install a dispatch table.
+        * Provides a mechanism for vendor libraries to report their
           GetProcAddress-able functions.
 
     * libGLESv1_CM.so.1:
@@ -118,16 +129,16 @@ Libraries
           get the EGL dispatch table.
         * Expected to pull in the vendor's implementation of all the client
           APIs it supports, and register with the appropriate API library at
-          MakeCurrent time.
+          MakeCurrent time.  The client API is specified by the application
+          via eglBindAPI().
         * Must not export symbols with names that collide with the namespace
           of EGL (^egl.*) or OpenGL (^gl.*).
 
     * libGLX_${VENDOR}.so.1
         * Provides a function that libGLX.so.1 can call to initialize and
           get the GLX dispatch table.
-        * Expected to pull in the vendor's implementation of all the client
-          APIs it supports, and register with the appropriate API library at
-          MakeCurrent time.
+        * Expected to pull in the vendor's implementation of the OpenGL
+          client API, and register with libOpenGL.so.1 at MakeCurrent time.
         * Must not export symbols with names that collide with the namespace
           of GLX (^glX.*) or OpenGL (^gl.*).
 
@@ -459,11 +470,13 @@ Issues
         on performance.  How can we mitigate the performance impact in
         such scenarios?
 
-        PROPOSED: The performant solution is to online-generate code
-        directly into the top-level function of the API library.  The API
-        library should provide a function that vendors can call, when
-        they deem it thread-safe to do so, that replaces the code in an
-        API library function with vendor-provided code.
+        PROPOSED: Accept the performance penalty.  All vendors on Linux
+        will be similarly impacted, so no one should be at a competitive
+        disadvantage.  The API libraries should provide mechanisms
+        to replace the dispatch table pointer, so vendors can still
+        dynamically change their per-thread dispatch table at run time,
+        so optimizations built on swapping dispatch tables based on GL
+        state are still possible.
 
     (6) How should libEGL.so select the vendor?
 
@@ -477,14 +490,14 @@ Issues
         dependencies cause multiple of these libraries to be loaded).
         How should symbol collisions be resolved?
 
-        As I understand it, Mesa has resolved this problem by making it
-        not matter which conflicting symbol gets loaded: the dispatch
-        table contains the union of entry points exposed by GLESv1,
-        GLESv2, and GL, and the dispatch function in each client API
-        library jumps through the same dispatch table.
+        PROPOSED: In the implementation of the API libraries, the entry
+        points should be provided by a common backend library.  In this
+        way, all the client API libraries get routed through the same
+        set of entry points, so it shouldn't matter which library's
+        symbols get selected by the loader.
 
-        Is the Mesa solution a reasonable requirement to make of all
-        vendors?  It would be fine for NVIDIA.
+        Note this scheme likely does not allow one thread to be
+        simultaneously current to both EGL+GLESv2 and GLX+OpenGL.
 
         Alternatively, ELF symbol versioning could be used to distinguish
         between symbols of the same name in each of the client API
@@ -492,51 +505,19 @@ Issues
         DSO Howto [7].  I've coded up a demonstration of how that might
         work here: [8].
 
-        Is it conceivable for a single thread to have both an EGL context
-        (say, using GLESv2) and GLX (using OpenGL) context current at
-        the same time?  If that were allowed, then the Mesa solution
-        might not be adequate.
-
     (8) How should OpenGL deprecation impact the Linux OpenGL ABI?
 
-        NVIDIA intends to support the OpenGL ARB_compatibility context
-        indefinitely, but other vendors may want to omit that.  In that
-        case, perhaps it would make sense to split libOpenGL.so.1 into
-        separate libraries; e.g.,
+        PROPOSED: libOpenGL.so.1 exposes symbols for OpenGL 4.4 and
+        the OpenGL ARB_compatibility extension.  Vendors are free to
+        implement only earlier versions of OpenGL, and/or not implement
+        the ARB_compatibility extension.  However, the vendor library
+        will still need to register functions for all of those entry
+        points; any unimplemented entry points could be noops.
 
-            * libOpenGLv31.so.1 provides all entry points available in
-              the core profile of OpenGL 3.1.
-
-            * libOpenGLv10.so.1 provides entry points that were removed
-              in OpenGL 3.1.
-
-        The two digits identify the major.minor number of the first GL
-        version the library supports.
-
-        If an application wants to use a compatibility profile, utilizing
-        entry points in OpenGL 3.1 and any that were removed in OpenGL
-        3.1, then link against both libraries:
-
-           -lOpenGLv31 -lOpenGLv10
-
-        It would be intended that there are no symbol collisions between
-        libOpenGLv31.so.1 and libOpenGLv10.so.1.
-
-        But what happens if a future OpenGL version (M.N) removes another
-        set of entry points?  It would sort of make sense to organize
-        the libraries like this:
-
-        * libOpenGLvMN.so.1 provides all entry points available in the
-          core profile of OpenGL M.N.
-        * libOpenGLv31.so.1 provides all entry points that were removed
-          in OpenGL M.N.
-        * libOpenGLv10.so.1 provides all entry points that were removed
-          in OpenGL 3.1.
-
-        But, we should not remove entry points from libOpenGLv31.so.1.
-
-        Perhaps multiple libraries are more complicated than they are
-        worth, and we should use a single libOpenGL.so.1?
+        Splitting up entry points into different libOpenGLvXY.so.1
+        libraries was considered, but this seemed complicated, and at
+        odds with the goal of minimizing maintenance burden for the
+        API libraries.
 
     (9) How should server-side GLX be handled with multiple vendors?
         X extensions are registered with server, not screen, scope.
@@ -603,3 +584,12 @@ Revision History
           finalized and deployed
         - add an issue for standardizing OpenGL header files
         - add diagrams to the scenarios in the Example Control Flow
+    #4 September 20, 2013: aritger
+        - Expand the libGL.so.1 description, to firm up the backwards 
+          compatibility plan.
+        - As a strawman, propose that libOpenGL.so.1 will export all 
+          OpenGL 4.4 + ARB_compatibility symbols.
+        - Comment on Issue (5), performance penalty of dispatching.
+        - Expand on Issue (7), symbol collisions between client APIs.
+        - Comment on Issue (8), interaction with OpenGL deprecation.
+
